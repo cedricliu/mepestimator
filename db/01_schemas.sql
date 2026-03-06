@@ -118,9 +118,9 @@ CREATE INDEX IF NOT EXISTS idx_ql_description_fts
     ON proc.quote_lines
     USING GIN (to_tsvector('simple', description));
 -- Unique constraint for ON CONFLICT upsert
--- vendor_id excluded (nullable); item_code defaults to '' so it is always NOT NULL
+-- COALESCE(vendor_id, 0) allows multiple vendors per item while still deduplicating same-vendor re-submissions
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ql_natural_key
-    ON proc.quote_lines (project_id, discipline, item_code, description);
+    ON proc.quote_lines (project_id, discipline, item_code, description, COALESCE(vendor_id, '00000000-0000-0000-0000-000000000000'::uuid));
 
 -- =============================================================
 -- STAGING TABLE

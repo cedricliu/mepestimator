@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
 import Upload from './pages/Upload'
 import Estimate from './pages/Estimate'
+import Products from './pages/Products'
 
 export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -18,6 +19,7 @@ function NavBar() {
       <NavLink to="/" end className={linkClass}>搜尋 Dashboard</NavLink>
       <NavLink to="/upload" className={linkClass}>上傳 Upload</NavLink>
       <NavLink to="/estimate" className={linkClass}>估價 Estimate</NavLink>
+      <NavLink to="/products" className={linkClass}>品項 Products</NavLink>
     </nav>
   )
 }
@@ -32,6 +34,7 @@ export default function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/upload" element={<Upload />} />
             <Route path="/estimate" element={<Estimate />} />
+            <Route path="/products" element={<Products />} />
           </Routes>
         </main>
       </div>

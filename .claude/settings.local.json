@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(pip install:*)",
-      "Bash(docker compose:*)"
+      "Bash(docker compose:*)",
+      "Bash(docker restart:*)",
+      "Bash(python:*)",
+      "Bash(curl:*)"
     ]
   }
 }

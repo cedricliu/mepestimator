@@ -206,6 +206,102 @@ except Exception as e:
     record(False, "mv_price_stats refresh", f"Refresh failed: {e}")
 
 # ---------------------------------------------------------------------------
+# Test 7: All 5 new product tables exist in proc schema
+# ---------------------------------------------------------------------------
+try:
+    NEW_TABLES = [
+        "brands", "product_families", "attribute_definitions",
+        "products", "product_attributes",
+    ]
+    cur.execute(
+        """
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = 'proc'
+          AND table_name = ANY(%s)
+        """,
+        (NEW_TABLES,),
+    )
+    found = {r[0] for r in cur.fetchall()}
+    missing = [t for t in NEW_TABLES if t not in found]
+    if not missing:
+        record(True, "Product tables exist",
+               f"All 5 new proc tables present: {', '.join(NEW_TABLES)}")
+    else:
+        record(False, "Product tables exist",
+               f"Missing tables: {', '.join(missing)}")
+except Exception as e:
+    record(False, "Product tables exist", f"ERROR: {e}")
+    conn.rollback()
+
+# ---------------------------------------------------------------------------
+# Test 8: All 5 product families have >= 1 attribute_definition seeded
+# ---------------------------------------------------------------------------
+try:
+    cur.execute(
+        """
+        SELECT pf.family_code, COUNT(ad.attr_def_id) AS attr_count
+        FROM proc.product_families pf
+        LEFT JOIN proc.attribute_definitions ad ON ad.family_id = pf.family_id
+        GROUP BY pf.family_code
+        HAVING COUNT(ad.attr_def_id) < 1
+        """
+    )
+    empty_families = cur.fetchall()
+    cur.execute("SELECT COUNT(*) FROM proc.product_families")
+    total_families = cur.fetchone()[0]
+    if empty_families:
+        record(False, "Attribute definitions seeded",
+               f"Families with 0 attr_defs: {[r[0] for r in empty_families]}")
+    elif total_families < 5:
+        record(False, "Attribute definitions seeded",
+               f"Only {total_families} families found (expected 5)")
+    else:
+        record(True, "Attribute definitions seeded",
+               f"All {total_families} families have >= 1 attribute_definition")
+except Exception as e:
+    record(False, "Attribute definitions seeded", f"ERROR: {e}")
+    conn.rollback()
+
+# ---------------------------------------------------------------------------
+# Test 9: product_id column exists on proc.quote_lines
+# ---------------------------------------------------------------------------
+try:
+    cur.execute(
+        """
+        SELECT column_name, data_type
+        FROM information_schema.columns
+        WHERE table_schema = 'proc'
+          AND table_name   = 'quote_lines'
+          AND column_name  = 'product_id'
+        """
+    )
+    col = cur.fetchone()
+    if col:
+        record(True, "quote_lines.product_id exists",
+               f"Column present with data_type={col[1]}")
+    else:
+        record(False, "quote_lines.product_id exists",
+               "Column 'product_id' not found on proc.quote_lines")
+except Exception as e:
+    record(False, "quote_lines.product_id exists", f"ERROR: {e}")
+    conn.rollback()
+
+# ---------------------------------------------------------------------------
+# Test 10: REFRESH MATERIALIZED VIEW proc.mv_product_price_stats succeeds
+# ---------------------------------------------------------------------------
+try:
+    cur.execute("REFRESH MATERIALIZED VIEW proc.mv_product_price_stats")
+    conn.commit()
+    cur.execute("SELECT COUNT(*) FROM proc.mv_product_price_stats")
+    count = cur.fetchone()[0]
+    record(True, "mv_product_price_stats refresh",
+           f"Materialized view refreshed successfully ({count} rows)")
+except Exception as e:
+    conn.rollback()
+    record(False, "mv_product_price_stats refresh", f"Refresh failed: {e}")
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 cur.close()

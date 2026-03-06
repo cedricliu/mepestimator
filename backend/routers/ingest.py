@@ -17,6 +17,8 @@ import pandas as pd
 import psycopg2.extras
 from fastapi import APIRouter, Request, UploadFile, File, HTTPException
 
+from routers.products import _match_product
+
 router = APIRouter()
 
 # ---------------------------------------------------------------------------
@@ -305,6 +307,8 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
         # ------------------------------------------------------------------
         # Step 6: Upsert valid rows into proc.* tables
         # ------------------------------------------------------------------
+        rows_matched_product = 0
+        rows_needs_review = 0
         if ok_rows:
             # Collect unique project_codes and vendor_codes
             project_codes = list({r["project_code"] for r in ok_rows})
@@ -377,9 +381,8 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
                         (project_id, vendor_id, discipline, item_code, description,
                          uom, qty, unit_price, currency, source_file, import_batch)
                     VALUES %s
-                    ON CONFLICT (project_id, discipline, item_code, description)
+                    ON CONFLICT (project_id, discipline, item_code, description, COALESCE(vendor_id, '00000000-0000-0000-0000-000000000000'::uuid))
                     DO UPDATE SET
-                        vendor_id    = EXCLUDED.vendor_id,
                         uom          = EXCLUDED.uom,
                         qty          = EXCLUDED.qty,
                         unit_price   = EXCLUDED.unit_price,
@@ -391,8 +394,66 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
                     page_size=500,
                 )
 
-            # Refresh materialized view after successful ingest
+            # ------------------------------------------------------------------
+            # Product matching pass: match unlinked lines from this batch
+            # ------------------------------------------------------------------
+            cur.execute(
+                """
+                SELECT ql.line_id, ql.description
+                FROM proc.quote_lines ql
+                WHERE ql.import_batch = %s
+                  AND ql.product_id IS NULL
+                """,
+                (import_batch,),
+            )
+            unmatched_lines = cur.fetchall()
+
+            matched_updates: list[tuple] = []  # (product_id, line_id)
+            needs_review_ids: list[str] = []
+
+            for line_id, desc in unmatched_lines:
+                product_id, confidence = _match_product(cur, desc)
+                if confidence > 0.8 and product_id:
+                    matched_updates.append((product_id, str(line_id)))
+                elif confidence > 0 and product_id:
+                    # Mark staging row as NEEDS_REVIEW
+                    cur.execute(
+                        """
+                        UPDATE stg.raw_quote_lines
+                        SET parse_status = 'NEEDS_REVIEW',
+                            parse_notes  = %s
+                        WHERE import_batch = %s
+                          AND description = %s
+                          AND parse_status = 'OK'
+                        """,
+                        (
+                            f"Possible match product_id={product_id} confidence={confidence:.2f}",
+                            import_batch,
+                            desc,
+                        ),
+                    )
+                    needs_review_ids.append(str(line_id))
+
+            rows_matched_product = 0
+            if matched_updates:
+                psycopg2.extras.execute_values(
+                    cur,
+                    """
+                    UPDATE proc.quote_lines AS ql
+                    SET product_id = v.product_id::uuid
+                    FROM (VALUES %s) AS v(product_id, line_id)
+                    WHERE ql.line_id = v.line_id::uuid
+                    """,
+                    matched_updates,
+                    page_size=500,
+                )
+                rows_matched_product = len(matched_updates)
+
+            rows_needs_review = len(needs_review_ids)
+
+            # Refresh both materialized views
             cur.execute("REFRESH MATERIALIZED VIEW proc.mv_price_stats")
+            cur.execute("REFRESH MATERIALIZED VIEW proc.mv_product_price_stats")
 
         conn.commit()
         cur.close()
@@ -401,6 +462,8 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
             "rows_loaded": rows_loaded,
             "rows_ok": len(ok_rows),
             "rows_exception": len(exceptions_detail),
+            "rows_needs_review": rows_needs_review,
+            "rows_matched_product": rows_matched_product,
             "exceptions": exceptions_detail,
         }
 

@@ -23,6 +23,8 @@ run_sql() {
 run_sql "db/01_schemas.sql"
 run_sql "db/02_seed_data.sql"
 run_sql "db/03_views.sql"
+run_sql "db/04_product_schema.sql"
+run_sql "db/05_sample_data.sql"
 
 echo ""
 echo "======================================"

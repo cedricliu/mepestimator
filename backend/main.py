@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 
-from routers import health, ingest, quotes, vendors
+from routers import health, ingest, products, quotes, vendors
 
 
 @asynccontextmanager
@@ -40,10 +40,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(ingest.router, prefix="/ingest", tags=["ingest"])
-app.include_router(quotes.router, prefix="/quotes", tags=["quotes"])
-app.include_router(vendors.router, prefix="/vendors", tags=["vendors"])
-app.include_router(health.router, tags=["health"])
+app.include_router(ingest.router,    prefix="/ingest",    tags=["ingest"])
+app.include_router(quotes.router,    prefix="/quotes",    tags=["quotes"])
+app.include_router(vendors.router,   prefix="/vendors",   tags=["vendors"])
+app.include_router(products.router,  prefix="/products",  tags=["products"])
+app.include_router(health.router,    tags=["health"])
 
 
 @app.get("/")
