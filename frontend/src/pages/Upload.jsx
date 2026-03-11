@@ -1,5 +1,6 @@
-import { useState, useRef } from 'react'
-import { API_BASE } from '../App'
+import { useState, useRef, useContext } from 'react'
+import { Navigate } from 'react-router-dom'
+import { useAuthContext, ApiContext } from '../App'
 
 const ACCEPTED = ['csv', 'xlsx']
 
@@ -10,6 +11,9 @@ function fileSize(bytes) {
 }
 
 export default function Upload() {
+  const { token } = useAuthContext()
+  const api = useContext(ApiContext)
+
   const [file, setFile] = useState(null)
   const [fileError, setFileError] = useState(null)
   const [dragging, setDragging] = useState(false)
@@ -18,6 +22,9 @@ export default function Upload() {
   const [apiError, setApiError] = useState(null)
   const [showExceptions, setShowExceptions] = useState(false)
   const inputRef = useRef(null)
+
+  // Auth guard — redirect to /login if not authenticated
+  if (!token) return <Navigate to="/login" replace />
 
   function validateAndSet(f) {
     if (!f) return
@@ -41,23 +48,21 @@ export default function Upload() {
   }
 
   async function handleUpload() {
-    if (!file) return
+    if (!file || !api) return
     setUploading(true)
     setApiError(null)
     setResult(null)
     const fd = new FormData()
     fd.append('file', file)
     try {
-      const res = await fetch(`${API_BASE}/ingest/upload`, { method: 'POST', body: fd })
-      const json = await res.json()
-      if (!res.ok) {
-        setApiError(json.detail || `HTTP ${res.status}`)
-      } else {
-        setResult(json)
-        setShowExceptions(false)
-      }
+      const r = await api.post('/ingest/upload', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      setResult(r.data)
+      setShowExceptions(false)
     } catch (e) {
-      setApiError(`網路錯誤: ${e.message}`)
+      const msg = e.response?.data?.detail || `HTTP ${e.response?.status || 'error'}`
+      setApiError(msg)
     } finally {
       setUploading(false)
     }

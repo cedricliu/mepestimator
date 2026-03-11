@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useContext } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { API_BASE } from '../App'
+import { ApiContext } from '../App'
 
 // URL params that are not attribute filter keys
 const RESERVED = new Set(['family', 'sort', 'page', 'date_from', 'date_to', 'brand_ids', 'vendor_ids'])
@@ -287,6 +287,7 @@ const SORT_OPTIONS = [
 ]
 
 export default function Dashboard() {
+  const api = useContext(ApiContext)
   const [searchParams, setSearchParams] = useSearchParams()
 
   const [families,      setFamilies]      = useState([])
@@ -370,54 +371,57 @@ export default function Dashboard() {
 
   // ── load families ──────────────────────────────────────────────────────────
   useEffect(() => {
-    fetch(`${API_BASE}/products/families`)
-      .then(r => r.json())
-      .then(j => setFamilies(j.data || []))
+    if (!api) return
+    api.get('/products/families')
+      .then(r => setFamilies(r.data.data || []))
       .catch(() => {})
-  }, [])
+  }, [api])
 
   // ── load facets when family changes ───────────────────────────────────────
   useEffect(() => {
     if (!selectedFamily) { setFacets(null); return }
+    if (!api) return
     setFacetsLoading(true)
-    fetch(`${API_BASE}/products/facets?family_code=${encodeURIComponent(selectedFamily)}`)
-      .then(r => r.json())
-      .then(j => setFacets(j))
+    api.get('/products/facets', { params: { family_code: selectedFamily } })
+      .then(r => setFacets(r.data))
       .catch(() => setFacets(null))
       .finally(() => setFacetsLoading(false))
-  }, [selectedFamily])
+  }, [selectedFamily, api])
 
   // ── fetch results whenever any URL param changes ───────────────────────────
   const abortRef = useRef(null)
   useEffect(() => {
-    if (!selectedFamily) { setResults([]); setMeta({ total: 0, pages: 0 }); return }
+    if (!selectedFamily || !api) { setResults([]); setMeta({ total: 0, pages: 0 }); return }
 
     if (abortRef.current) abortRef.current.abort()
     abortRef.current = new AbortController()
     const signal = abortRef.current.signal
 
     setLoading(true)
-    const p = new URLSearchParams({ family_code: selectedFamily, sort, page, page_size: 20 })
-    if (dateFrom)          p.set('date_from',  dateFrom)
-    if (dateTo)            p.set('date_to',    dateTo)
-    if (brandIdsStr)       p.set('brand_ids',  brandIdsStr)
-    if (vendorIdsStr)      p.set('vendor_ids', vendorIdsStr)
+    const params = { family_code: selectedFamily, sort, page, page_size: 20 }
+    if (dateFrom)    params.date_from  = dateFrom
+    if (dateTo)      params.date_to    = dateTo
+    if (brandIdsStr) params.brand_ids  = brandIdsStr
+    if (vendorIdsStr) params.vendor_ids = vendorIdsStr
 
     const attrsPayload = {}
     for (const [k, v] of searchParams.entries()) {
       if (!RESERVED.has(k) && v) attrsPayload[k] = v.split(',')
     }
-    if (Object.keys(attrsPayload).length) p.set('attrs', JSON.stringify(attrsPayload))
+    if (Object.keys(attrsPayload).length) params.attrs = JSON.stringify(attrsPayload)
 
-    fetch(`${API_BASE}/products/search?${p}`, { signal })
-      .then(r => r.json())
-      .then(j => { setResults(j.data || []); setMeta(j.meta || { total: 0, pages: 0 }) })
-      .catch(e => { if (e.name !== 'AbortError') { setResults([]); setMeta({ total: 0, pages: 0 }) } })
+    api.get('/products/search', { params, signal })
+      .then(r => { setResults(r.data.data || []); setMeta(r.data.meta || { total: 0, pages: 0 }) })
+      .catch(e => {
+        if (e.name !== 'CanceledError' && e.name !== 'AbortError') {
+          setResults([]); setMeta({ total: 0, pages: 0 })
+        }
+      })
       .finally(() => setLoading(false))
 
     return () => abortRef.current?.abort()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams.toString()])
+  }, [searchParams.toString(), api])
 
   // ── active filter tags ─────────────────────────────────────────────────────
   const activeFilters = []

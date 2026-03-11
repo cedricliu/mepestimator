@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { API_BASE } from '../App'
+import { useState, useContext } from 'react'
+import { ApiContext } from '../App'
 
 const PROJECT_TYPES = [
   { code: 'WAREHOUSE',   label: 'WAREHOUSE — 倉儲' },
@@ -48,6 +48,7 @@ function exportCSV(rows) {
 }
 
 export default function Estimate() {
+  const api = useContext(ApiContext)
   const [projectType, setProjectType] = useState('')
   const [gfa, setGfa] = useState('')
   const [loading, setLoading] = useState(false)
@@ -55,19 +56,20 @@ export default function Estimate() {
   const [data, setData] = useState(null)
 
   async function generate() {
-    if (!projectType || !gfa || Number(gfa) <= 0) return
+    if (!projectType || !gfa || Number(gfa) <= 0 || !api) return
     setLoading(true)
     setError(null)
     setData(null)
     try {
-      const params = new URLSearchParams({ project_type: projectType, gfa_m2: gfa })
-      const res = await fetch(`${API_BASE}/quotes/estimate?${params}`)
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.detail || `HTTP ${res.status}`)
+      const r = await api.get('/quotes/estimate', {
+        params: { project_type: projectType, gfa_m2: gfa },
+      })
+      const json = r.data
       if (json.meta?.errors?.length) throw new Error(json.meta.errors[0])
       setData(json.data || [])
     } catch (e) {
-      setError(`API 錯誤: ${e.message}`)
+      const msg = e.response?.data?.detail || e.message
+      setError(`API 錯誤: ${msg}`)
     } finally {
       setLoading(false)
     }

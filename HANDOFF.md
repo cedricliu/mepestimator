@@ -1,171 +1,124 @@
-# HANDOFF — Sprint 4 Complete
-# MEP Pricing Intelligence System — JSONB Products + Admin UI Foundation
+# HANDOFF — Sprint 5 Complete
+# MEP Pricing Intelligence System — Estimator App JWT Auth
 
 Generated: 2026-03-11
-Sprint: S4 — Product Catalog (JSONB Facets + Admin App)
+Sprint: S5 — Estimator App (JWT login gate + authenticated search)
 
 ---
 
-## What Was Built
+## Sprint 5 Goal
+Add JWT login gate and authenticated axios client to the estimator frontend app (:5173).
 
-### Phase 1 — Backend: backend/routers/products.py (full rewrite)
+## Status
+Sprint 5 COMPLETE. All S5 deliverables implemented, Docker container rebuilt and running, 12/12 validate.py tests PASSED.
 
-All references to the dropped `proc.product_attributes` EAV table have been removed.
-Every query now reads from `proc.products.attributes` JSONB directly (GIN-indexed).
+---
 
-#### Endpoints fixed / rewritten:
+## Files Created (Sprint 5)
 
-| Endpoint | Fix |
+| File | Description |
 |---|---|
-| GET /products/attributes | Replaced EAV JOIN with correlated subquery on `pr.attributes ->> ad.attr_key` |
-| GET /products/all | Replaced `jsonb_object_agg(pa.*)` subquery with `pr.attributes` column reference |
-| GET /products/facets | Replaced `JOIN proc.product_attributes pa` with `pr.attributes ? ad.attr_key` + `pr.attributes ->> ad.attr_key` |
-| GET /products/search | (1) attr filter: `EXISTS (product_attributes)` → `pr.attributes ->> %s = ANY(%s)`; (2) attributes subquery → `pr.attributes` |
-| GET /products/search | Added `q` keyword param: FTS + ILIKE combo on `pr.description` |
-
-#### New endpoint: POST /products (admin only)
-- Body: `{family_code, description, brand_id?, attributes?}`
-- Validates `family_code` + `brand_id` if provided
-- Auto-assigns `product_code`: `{DISC[0]}-{FAMILY_CODE}-{SEQ:04d}`, collision-safe loop
-- Returns full row with `product_code`, `product_id`, `attributes`
-
-### Phase 2 — Frontend: admin/ src/ scaffolding (NEW)
-
-#### Files created:
-```
-admin/
-  index.html                  NEW — Vite entry point, lang=zh-TW
-  package.json                UPDATED — added axios ^1.6.8
-  src/
-    index.css                 NEW — Tailwind @tailwind directives
-    main.jsx                  NEW — ReactDOM.createRoot entry
-    App.jsx                   NEW — BrowserRouter + AuthContext + ApiContext
-    hooks/
-      useAuth.js              NEW — JWT in useState, login/refresh/logout
-    api/
-      client.js               NEW — axios instance + 401 silent refresh interceptor
-    pages/
-      Login.jsx               NEW — email/password form
-      Products.jsx            NEW — family tabs + facet filters + product cards + create form
-      Families.jsx            NEW — expandable family list + attribute_definitions table
-```
-
-#### Auth pattern (per PRD 7.2):
-- `useAuth.js`: access token in `useState`, never localStorage/sessionStorage
-- `client.js`: axios interceptor injects `Authorization: Bearer <token>`, on 401 silently calls `POST /auth/refresh`, retries once, then `navigate('/login')`
-- Refresh deduplication: `useRef(refreshPromise)` prevents multiple concurrent refresh calls
-
-#### App.jsx design:
-- `AuthContext` + `ApiContext` provided from root
-- `createApiClient(getToken, refresh, navigate)` factory called in `InnerApp` (inside BrowserRouter)
-- `ProtectedRoute` redirects to `/login` if `token === null`
-- Routes: `/login`, `/products`, `/families` (others redirect to `/products`)
-
-#### Products.jsx features:
-- Left panel: family tabs (GET /products/families) + JSONB attribute checkboxes (GET /products/facets)
-- Right panel: product cards with attribute chips + avg/min/max price stats + quote count
-- Keyword search (q param) + page navigator
-- "新增品項" inline form → POST /products with JSON attributes textarea
-- Optimistic UI: newly created product prepended to list
-
-#### Families.jsx features:
-- Grouped by discipline with color-coded discipline badges
-- Lazy-load: attribute_definitions fetched on first expand (GET /products/attributes)
-- `AttributeTable`: attr_key, label_zh, value_type, unit, distinct values (up to 8 chips)
+| `frontend/src/hooks/useAuth.js` | JWT hook — token in useState, login/refresh/logout, refresh deduplication via useRef |
+| `frontend/src/api/client.js` | axios factory — Bearer injection, 401 silent refresh + retry, navigate('/login') on failure |
+| `frontend/src/pages/Login.jsx` | Estimator login form — email/password, stores token via AuthContext, redirects to / |
 
 ---
 
-## Backend Test Results
+## Files Modified (Sprint 5)
 
-```
-GET /products/families     → count=5
-GET /products/facets       → family=EMT_CONDUIT, facets=['diameter','material','standard','length_m']
-GET /products/search       → total=3, first_code=EMT-1/2-TECO
-GET /products/attributes   → count=4 keys for WIRE_CABLE
-POST /products             → product_code=E-EMT_CONDUIT-0004
-GET /products/search+attrs → total=3 (insulation=PVC filter working)
-```
-
----
-
-## Decisions Made
-
-| Decision | Rationale |
+| File | Change |
 |---|---|
-| `pr.attributes ->> %s = ANY(%s)` | attr_key passed as param (whitelisted first); ANY() gives OR-within-key |
-| `createApiClient` in InnerApp | `useNavigate` must be inside BrowserRouter; InnerApp is child |
-| Families page lazy-load attrs | Avoids page-load N+1; correct pattern for Sprint 7 CRUD |
-| axios added to admin/package.json | Required for client.js; installed at Docker build time |
+| `frontend/package.json` | Added `"axios": "^1.6.8"` to dependencies |
+| `frontend/src/App.jsx` | Full rewrite: AuthContext + ApiContext + ProtectedRoute + InnerApp pattern (mirrors admin/src/App.jsx), logout button in NavBar |
+| `frontend/src/pages/Dashboard.jsx` | Replaced all fetch() with api.get() from ApiContext; added `useContext(ApiContext)`; preserved all filter/display/pagination/abort logic |
+| `frontend/src/pages/Estimate.jsx` | Replaced fetch() with api.get('/quotes/estimate') from ApiContext; preserved all display logic |
+| `frontend/src/pages/Products.jsx` | Replaced fetch() with api.get('/products/all') from ApiContext; removed write operations (AssignControl, UnmatchedTable) — estimator read-only view |
+| `frontend/src/pages/Upload.jsx` | Added auth guard (Navigate to /login if token null); replaced fetch() with api.post('/ingest/upload') from ApiContext |
 
 ---
 
-## validate.py Result
+## Docker Build Result
+- Image built: `docker build -t mep_db-frontend ./frontend` — SUCCESS
+- npm install took ~2200s (fresh node_modules with new axios dependency)
+- Container restarted: `docker compose up -d frontend` — SUCCESS
+- Container status: `mep_frontend` Up, port 0.0.0.0:5173->5173/tcp, created 2026-03-11 14:18:58
 
+---
+
+## Validation Result
 ```
+DB_HOST=localhost python tests/validate.py
 Result: 12/12 PASSED
 ```
+All 12 tests pass. No regressions from S4.
 
 ---
 
-## Current State After Sprint 4
+## Key Decisions Made
 
-| Item | Status |
-|---|---|
-| products.py — all EAV refs | REWRITTEN to JSONB |
-| POST /products | NEW |
-| GET /products/search + q | NEW keyword param |
-| admin/index.html | NEW |
-| admin/src/main.jsx + index.css | NEW |
-| admin/src/App.jsx | NEW — auth context + protected routes |
-| admin/src/hooks/useAuth.js | NEW — token in useState |
-| admin/src/api/client.js | NEW — axios + 401 interceptor |
-| admin/src/pages/Login.jsx | NEW |
-| admin/src/pages/Products.jsx | NEW |
-| admin/src/pages/Families.jsx | NEW (read-only) |
-| admin/src/pages/Upload.jsx | NOT YET — Sprint 6 |
-| admin/src/pages/Review.jsx | NOT YET — Sprint 6 |
-| admin/src/pages/Vendors.jsx | NOT YET — Sprint 6 |
-| admin/src/pages/Health.jsx | NOT YET — Sprint 6 |
-| frontend/ login gate | NOT YET — Sprint 5 |
+1. **AuthContext exported from App.jsx** — Login.jsx imports `useAuthContext` from `../App` (same pattern as admin/).
+2. **ApiContext via useMemo** — `createApiClient(() => auth.token, auth.refresh, navigate)` memoized on `auth.token` changes to avoid redundant interceptor recreation.
+3. **Products.jsx estimator is read-only** — Removed `AssignControl` and `UnmatchedTable` (write operations). Admin CRUD remains in `admin/src/pages/Products.jsx`. Estimator sees paginated read-only catalogue.
+4. **Dashboard abort handling** — axios uses `CanceledError` (not `AbortError`) for AbortController signals. Both names are caught to avoid spurious state resets on navigation.
+5. **Upload.jsx stays in frontend/** — Per sprint plan, it moves to admin/ in S6. For now it has an auth guard (Navigate to /login if no token) and uses the authenticated api client.
+6. **Login.jsx redirects to /** — Unlike admin/ which goes to /products, the estimator Login.jsx redirects to / (Dashboard).
 
 ---
 
-## Sprint 5 — Exact Next Steps
-
-**Goal:** Estimator App — JWT login gate + authenticated search + estimate
-
-### What Sprint 5 must build in frontend/:
-1. **frontend/src/hooks/useAuth.js** — same pattern as admin: token in useState, silent refresh
-2. **frontend/src/api/client.js** — axios factory, 401 interceptor
-3. **frontend/src/pages/Login.jsx** — estimator login form (role=estimator OR admin both OK)
-4. **frontend/src/App.jsx** — add AuthContext + ApiContext, wrap routes in ProtectedRoute
-5. **frontend/src/pages/Dashboard.jsx** — switch all fetch() calls to use axios api client with auth header; verify JSONB facet filters still work with /products/facets shape
-6. **frontend/src/pages/Estimate.jsx** — add auth header; verify quotes/estimate endpoint works
-7. **frontend/src/pages/Products.jsx** (in frontend/) — estimator gets read-only view, no create button
-
-### Agent: frontend-engineer
-### Depends on: S4 complete
-
----
-
-## File Map After Sprint 4
+## Architecture (post-S5)
 
 ```
-backend/
-  routers/
-    products.py       REWRITTEN — JSONB throughout, POST /products added
-
-admin/
-  index.html          NEW
-  package.json        Updated (axios)
+frontend/ (:5173) — Estimator App
   src/
-    main.jsx          NEW
-    index.css         NEW
-    App.jsx           NEW
-    hooks/useAuth.js  NEW
-    api/client.js     NEW
+    hooks/useAuth.js     NEW — JWT in useState, login/refresh/logout
+    api/client.js        NEW — axios + 401 interceptor
+    App.jsx              UPDATED — AuthContext, ApiContext, ProtectedRoute, NavBar with logout
     pages/
-      Login.jsx       NEW
-      Products.jsx    NEW
-      Families.jsx    NEW
+      Login.jsx          NEW — email+password form, redirects to /
+      Dashboard.jsx      UPDATED — api from ApiContext replaces all fetch()
+      Estimate.jsx       UPDATED — api from ApiContext replaces fetch()
+      Products.jsx       UPDATED — read-only, api from ApiContext replaces fetch()
+      Upload.jsx         UPDATED — auth guard + api client replaces fetch()
 ```
+
+---
+
+## Next Sprint: S6 — Admin App Pages
+
+### Goal
+Complete the admin/ app with all operational pages: Upload, Review, Vendors, Health.
+
+### Files to Create in admin/src/pages/
+1. **Upload.jsx** — Move from frontend/src/pages/Upload.jsx; requires admin role; uses admin api client
+2. **Review.jsx** — NEEDS_REVIEW queue: GET /ingest/review → list stg rows with parse_status=NEEDS_REVIEW; POST /ingest/resolve to resolve each with JSONB attribute fields
+3. **Vendors.jsx** — GET /vendors (read list) + POST /vendors (create vendor) + brand registry management
+4. **Health.jsx** — GET /health + row counts (proc.quote_lines, stg.raw_quote_lines by parse_status) + batch history
+
+### Files to Extend in admin/
+- `admin/src/App.jsx` — Add routes for Upload, Review, Vendors, Health; add NavLinks
+
+### Backend endpoints to verify before building UI
+- GET /ingest/review (admin guard) — returns NEEDS_REVIEW rows from stg
+- POST /ingest/resolve (admin guard) — accepts line_id + product_id or attributes
+- GET /vendors (estimator+) — list vendors
+- POST /vendors (admin) — create vendor
+- GET /health (estimator+) — system status
+
+### First steps for S6
+1. Read `admin/src/App.jsx` to see current routes and NavLinks
+2. Read `backend/routers/ingest.py` sections for /review and /resolve response shapes
+3. Read `backend/routers/vendors.py` to understand GET/POST /vendors response shapes
+4. Create admin/src/pages/Review.jsx
+5. Create admin/src/pages/Vendors.jsx
+6. Create admin/src/pages/Health.jsx
+7. Create admin/src/pages/Upload.jsx (adapt from frontend/ version, add admin note)
+8. Update admin/src/App.jsx — new routes + NavLinks
+9. Rebuild admin Docker container: `docker compose up -d --build admin`
+10. Run `DB_HOST=localhost python tests/validate.py`
+
+### Hard rules for S6
+- Admin pages go in admin/ only — never frontend/
+- All API calls use the admin api client from ApiContext (already wired in admin/src/App.jsx)
+- POST /ingest/resolve must include admin JWT (enforced server-side)
+- No new DB schema changes expected for S6
+- Run validate.py after S6 — expect 12/12 PASSED
