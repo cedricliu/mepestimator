@@ -2,13 +2,15 @@
 GET /vendors — list active vendors
 """
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
+
+from auth_utils import require_estimator
 
 router = APIRouter()
 
 
 @router.get("")
-def list_vendors(request: Request):
+def list_vendors(request: Request, _: dict = Depends(require_estimator)):
     pool = request.app.state.pool
     conn = pool.getconn()
     try:

@@ -5,7 +5,9 @@ GET /quotes/estimate — GFA-based cost estimate from proc.mv_price_stats
 
 from typing import Optional
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
+
+from auth_utils import require_estimator
 
 router = APIRouter()
 
@@ -27,6 +29,7 @@ def search_quotes(
     q: str = Query(default="", description="Search keyword"),
     discipline: Optional[str] = Query(default=None),
     min_confidence: float = Query(default=0.7),
+    _: dict = Depends(require_estimator),
 ):
     pool = request.app.state.pool
     conn = pool.getconn()
@@ -75,6 +78,7 @@ def estimate(
     request: Request,
     project_type: str = Query(...),
     gfa_m2: float = Query(..., gt=0),
+    _: dict = Depends(require_estimator),
 ):
     pool = request.app.state.pool
     conn = pool.getconn()

@@ -2,13 +2,15 @@
 GET /health — DB ping + row counts
 """
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
+
+from auth_utils import require_estimator
 
 router = APIRouter()
 
 
 @router.get("/health")
-def health_check(request: Request):
+def health_check(request: Request, _: dict = Depends(require_estimator)):
     pool = request.app.state.pool
     conn = pool.getconn()
     try:

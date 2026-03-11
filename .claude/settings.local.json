@@ -18,7 +18,9 @@
       "Read(//c/Users/cedric.liu/AppData/Local/Programs/**)",
       "Bash(ls /c/Python*)",
       "Bash(where python:*)",
-      "Bash(/c/Users/cedric.liu/AppData/Local/Python/bin/python.exe -m pip show psycopg2 psycopg2-binary python-dotenv)"
+      "Bash(/c/Users/cedric.liu/AppData/Local/Python/bin/python.exe -m pip show psycopg2 psycopg2-binary python-dotenv)",
+      "Bash(docker exec mep_backend python3 -c \":*)",
+      "Bash(DB_HOST=localhost python tests/validate.py)"
     ]
   }
 }

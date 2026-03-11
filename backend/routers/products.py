@@ -12,7 +12,9 @@ POST /products/match-legacy
 
 import json as _json
 import psycopg2.extras
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Depends, Request, HTTPException
+
+from auth_utils import require_estimator, require_admin
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -88,7 +90,7 @@ def _match_product(cur, description: str, family_code: str | None = None) -> tup
 # GET /products/families
 # ---------------------------------------------------------------------------
 @router.get("/families")
-def get_families(request: Request):
+def get_families(request: Request, _: dict = Depends(require_estimator)):
     pool = request.app.state.pool
     conn = pool.getconn()
     try:
@@ -111,7 +113,7 @@ def get_families(request: Request):
 # GET /products/attributes?family_code=
 # ---------------------------------------------------------------------------
 @router.get("/attributes")
-def get_attributes(request: Request, family_code: str = ""):
+def get_attributes(request: Request, family_code: str = "", _: dict = Depends(require_estimator)):
     if not family_code:
         raise HTTPException(status_code=400, detail="family_code is required")
     pool = request.app.state.pool
@@ -158,7 +160,7 @@ def get_attributes(request: Request, family_code: str = ""):
 # GET /products/all — full catalogue, no family_code required
 # ---------------------------------------------------------------------------
 @router.get("/all")
-def get_all_products(request: Request, q: str = ""):
+def get_all_products(request: Request, q: str = "", _: dict = Depends(require_estimator)):
     pool = request.app.state.pool
     conn = pool.getconn()
     try:
@@ -202,7 +204,7 @@ def get_all_products(request: Request, q: str = ""):
 # GET /products/facets?family_code=
 # ---------------------------------------------------------------------------
 @router.get("/facets")
-def get_facets(request: Request, family_code: str = ""):
+def get_facets(request: Request, family_code: str = "", _: dict = Depends(require_estimator)):
     if not family_code:
         raise HTTPException(status_code=400, detail="family_code is required")
     pool = request.app.state.pool
@@ -323,7 +325,7 @@ def get_facets(request: Request, family_code: str = ""):
 #   page, page_size (default 20)
 # ---------------------------------------------------------------------------
 @router.get("/search")
-def search_products(request: Request):
+def search_products(request: Request, _: dict = Depends(require_estimator)):
     params      = request.query_params
     family_code = params.get("family_code", "")
     attrs_raw   = params.get("attrs", "")
@@ -521,7 +523,7 @@ def search_products(request: Request):
 # GET /products/brands?family_code=
 # ---------------------------------------------------------------------------
 @router.get("/brands")
-def get_brands(request: Request, family_code: str = ""):
+def get_brands(request: Request, family_code: str = "", _: dict = Depends(require_estimator)):
     pool = request.app.state.pool
     conn = pool.getconn()
     try:
@@ -562,7 +564,7 @@ def get_brands(request: Request, family_code: str = ""):
 # GET /products/unmatched
 # ---------------------------------------------------------------------------
 @router.get("/unmatched")
-def get_unmatched(request: Request):
+def get_unmatched(request: Request, _: dict = Depends(require_estimator)):
     pool = request.app.state.pool
     conn = pool.getconn()
     try:
@@ -592,7 +594,7 @@ class AssignBody(BaseModel):
 
 
 @router.patch("/assign")
-def assign_product(body: AssignBody, request: Request):
+def assign_product(body: AssignBody, request: Request, _: dict = Depends(require_admin)):
     pool = request.app.state.pool
     conn = pool.getconn()
     try:
@@ -628,7 +630,7 @@ class MatchLegacyBody(BaseModel):
 
 
 @router.post("/match-legacy")
-def match_legacy(body: MatchLegacyBody, request: Request):
+def match_legacy(body: MatchLegacyBody, request: Request, _: dict = Depends(require_admin)):
     pool = request.app.state.pool
     conn = pool.getconn()
     try:

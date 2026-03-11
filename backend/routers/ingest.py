@@ -15,7 +15,9 @@ from typing import Any
 
 import pandas as pd
 import psycopg2.extras
-from fastapi import APIRouter, Request, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, Request, UploadFile, File, HTTPException
+
+from auth_utils import require_admin
 
 from routers.products import _match_product
 
@@ -84,7 +86,7 @@ def _str(val: Any) -> str | None:
 
 
 @router.post("/upload")
-async def upload_file(request: Request, file: UploadFile = File(...)):
+async def upload_file(request: Request, file: UploadFile = File(...), _: dict = Depends(require_admin)):
     filename = file.filename or "unknown"
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
 
