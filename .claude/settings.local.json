@@ -20,7 +20,12 @@
       "Bash(where python:*)",
       "Bash(/c/Users/cedric.liu/AppData/Local/Python/bin/python.exe -m pip show psycopg2 psycopg2-binary python-dotenv)",
       "Bash(docker exec mep_backend python3 -c \":*)",
-      "Bash(DB_HOST=localhost python tests/validate.py)"
+      "Bash(DB_HOST=localhost python tests/validate.py)",
+      "Bash(docker exec:*)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0YWFjZjhkNC0xNzk3LTQwNWUtYjYyZC0xNTNkODAwYzIzZjMiLCJlbWFpbCI6ImNlZHJpYy5saXVAdHlzaWMuY29tLnR3Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzczMjM0NzA5LCJpYXQiOjE3NzMyMDU5MDl9.cKW5fbChXad11hoUMQKrnQySNR7AGQZSPG5vxjh5WXA\" __NEW_LINE_47fb96f444381afb__ echo \"=== GET /products/families ===\" curl -s -H \"Authorization: Bearer $TOKEN\" http://localhost:8000/products/families)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0YWFjZjhkNC0xNzk3LTQwNWUtYjYyZC0xNTNkODAwYzIzZjMiLCJlbWFpbCI6ImNlZHJpYy5saXVAdHlzaWMuY29tLnR3Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzczMjM0NzA5LCJpYXQiOjE3NzMyMDU5MDl9.cKW5fbChXad11hoUMQKrnQySNR7AGQZSPG5vxjh5WXA\" __NEW_LINE_f84dd9dd6015599e__ echo \"=== POST /products ===\" curl -s -X POST http://localhost:8000/products -H \"Authorization: Bearer $TOKEN\" -H \"Content-Type: application/json\" -d \"{\"\"family_code\"\":\"\"EMT_CONDUIT\"\",\"\"description\"\":\"\"EMT電線管 2吋 鍍鋅\"\",\"\"attributes\"\":{\"\"diameter\"\":\"\"2\"\"\"\"\",\"\"material\"\":\"\"鍍鋅\"\"}} \")",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0YWFjZjhkNC0xNzk3LTQwNWUtYjYyZC0xNTNkODAwYzIzZjMiLCJlbWFpbCI6ImNlZHJpYy5saXVAdHlzaWMuY29tLnR3Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzczMjM0NzA5LCJpYXQiOjE3NzMyMDU5MDl9.cKW5fbChXad11hoUMQKrnQySNR7AGQZSPG5vxjh5WXA\")",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0YWFjZjhkNC0xNzk3LTQwNWUtYjYyZC0xNTNkODAwYzIzZjMiLCJlbWFpbCI6ImNlZHJpYy5saXVAdHlzaWMuY29tLnR3Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzczMjM0NzA5LCJpYXQiOjE3NzMyMDU5MDl9.cKW5fbChXad11hoUMQKrnQySNR7AGQZSPG5vxjh5WXA\" curl -v -X POST http://localhost:8000/products -H \"Authorization: Bearer $TOKEN\" -H \"Content-Type: application/json\" -d '{\"\"\"\"family_code\"\"\"\":\"\"\"\"EMT_CONDUIT\"\"\"\",\"\"\"\"description\"\"\"\":\"\"\"\"EMT test product\"\"\"\",\"\"\"\"attributes\"\"\"\":{}}')"
     ]
   }
 }

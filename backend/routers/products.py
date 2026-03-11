@@ -1,11 +1,16 @@
 """
 Products router — structured product + attribute catalogue
+All attribute data comes from proc.products.attributes JSONB (GIN indexed).
+proc.product_attributes EAV table was dropped in Sprint 1 migration 07.
+
 GET  /products/families
 GET  /products/attributes?family_code=
 GET  /products/facets?family_code=
 GET  /products/search
+GET  /products/all
 GET  /products/brands?family_code=
 GET  /products/unmatched
+POST /products
 PATCH /products/assign
 POST /products/match-legacy
 """
@@ -111,6 +116,7 @@ def get_families(request: Request, _: dict = Depends(require_estimator)):
 
 # ---------------------------------------------------------------------------
 # GET /products/attributes?family_code=
+# Returns attr_definitions + distinct values sourced from products.attributes JSONB
 # ---------------------------------------------------------------------------
 @router.get("/attributes")
 def get_attributes(request: Request, family_code: str = "", _: dict = Depends(require_estimator)):
@@ -129,17 +135,21 @@ def get_attributes(request: Request, family_code: str = "", _: dict = Depends(re
                 ad.value_type,
                 ad.display_order,
                 COALESCE(
-                    ARRAY_AGG(DISTINCT pa.attr_value ORDER BY pa.attr_value)
-                    FILTER (WHERE pa.attr_value IS NOT NULL),
+                    (
+                        SELECT ARRAY_AGG(DISTINCT val ORDER BY val)
+                        FROM (
+                            SELECT pr2.attributes ->> ad.attr_key AS val
+                            FROM proc.products pr2
+                            WHERE pr2.family_id = pf.family_id
+                              AND pr2.attributes ? ad.attr_key
+                        ) sub
+                        WHERE val IS NOT NULL
+                    ),
                     '{}'
                 ) AS distinct_values
             FROM proc.attribute_definitions ad
             JOIN proc.product_families pf ON pf.family_id = ad.family_id
-            LEFT JOIN proc.products pr ON pr.family_id = pf.family_id
-            LEFT JOIN proc.product_attributes pa
-                   ON pa.product_id = pr.product_id AND pa.attr_key = ad.attr_key
             WHERE pf.family_code = %s
-            GROUP BY ad.attr_key, ad.label_zh, ad.unit, ad.value_type, ad.display_order
             ORDER BY ad.display_order
             """,
             (family_code,),
@@ -167,7 +177,8 @@ def get_all_products(request: Request, q: str = "", _: dict = Depends(require_es
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         where = "WHERE pr.description ILIKE %s" if q else ""
         params = [f"%{q}%"] if q else []
-        cur.execute(f"""
+        cur.execute(
+            f"""
             SELECT
                 pr.product_id,
                 pr.product_code,
@@ -175,12 +186,7 @@ def get_all_products(request: Request, q: str = "", _: dict = Depends(require_es
                 pf.family_code,
                 pf.family_name_zh,
                 b.brand_name,
-                COALESCE(
-                    (SELECT jsonb_object_agg(pa.attr_key, pa.attr_value)
-                     FROM proc.product_attributes pa
-                     WHERE pa.product_id = pr.product_id),
-                    '{{}}'::jsonb
-                ) AS attributes,
+                pr.attributes,
                 COALESCE(SUM(ps.quote_count), 0) AS quote_count
             FROM proc.products pr
             JOIN proc.product_families pf ON pf.family_id = pr.family_id
@@ -188,10 +194,13 @@ def get_all_products(request: Request, q: str = "", _: dict = Depends(require_es
             LEFT JOIN proc.mv_product_price_stats ps ON ps.product_id = pr.product_id
             {where}
             GROUP BY pr.product_id, pr.product_code, pr.description,
-                     pf.family_code, pf.family_name_zh, pf.discipline, b.brand_name
+                     pf.family_code, pf.family_name_zh, pf.discipline,
+                     b.brand_name, pr.attributes
             ORDER BY pf.discipline, pf.family_code, pr.description
             LIMIT 200
-        """, params)
+            """,
+            params,
+        )
         rows = cur.fetchall()
         cur.close()
         data = [dict(r) for r in rows]
@@ -202,6 +211,7 @@ def get_all_products(request: Request, q: str = "", _: dict = Depends(require_es
 
 # ---------------------------------------------------------------------------
 # GET /products/facets?family_code=
+# Attribute facets with option counts sourced from products.attributes JSONB
 # ---------------------------------------------------------------------------
 @router.get("/facets")
 def get_facets(request: Request, family_code: str = "", _: dict = Depends(require_estimator)):
@@ -220,7 +230,8 @@ def get_facets(request: Request, family_code: str = "", _: dict = Depends(requir
         if not fam:
             raise HTTPException(status_code=404, detail=f"Family {family_code!r} not found")
 
-        # Attribute facets with quote-line counts per value
+        # Attribute facets: per attr_key, per value, count of quote_lines
+        # Uses pr.attributes JSONB — no product_attributes table reference
         cur.execute(
             """
             SELECT
@@ -229,18 +240,19 @@ def get_facets(request: Request, family_code: str = "", _: dict = Depends(requir
                 ad.value_type  AS type,
                 ad.unit,
                 ad.display_order,
-                pa.attr_value,
-                COUNT(ql.line_id) AS quote_count
+                pr.attributes ->> ad.attr_key AS attr_value,
+                COUNT(ql.line_id)             AS quote_count
             FROM proc.attribute_definitions ad
             JOIN proc.product_families pf ON pf.family_id = ad.family_id
-            JOIN proc.product_attributes pa ON pa.attr_key = ad.attr_key
             JOIN proc.products pr
-                ON pr.product_id = pa.product_id AND pr.family_id = pf.family_id
+                ON pr.family_id = pf.family_id
+               AND pr.attributes ? ad.attr_key
             LEFT JOIN proc.quote_lines ql ON ql.product_id = pr.product_id
             WHERE pf.family_code = %s
+              AND pr.attributes ->> ad.attr_key IS NOT NULL
             GROUP BY ad.attr_key, ad.label_zh, ad.value_type, ad.unit,
-                     ad.display_order, pa.attr_value
-            ORDER BY ad.display_order, pa.attr_value
+                     ad.display_order, pr.attributes ->> ad.attr_key
+            ORDER BY ad.display_order, pr.attributes ->> ad.attr_key
             """,
             (family_code,),
         )
@@ -251,12 +263,12 @@ def get_facets(request: Request, family_code: str = "", _: dict = Depends(requir
             k = r["attr_key"]
             if k not in attrs_map:
                 attrs_map[k] = {
-                    "attr_key":     r["attr_key"],
-                    "label_zh":     r["label_zh"],
-                    "type":         r["type"],
-                    "unit":         r["unit"],
+                    "attr_key":      r["attr_key"],
+                    "label_zh":      r["label_zh"],
+                    "type":          r["type"],
+                    "unit":          r["unit"],
                     "display_order": r["display_order"],
-                    "options":      [],
+                    "options":       [],
                 }
             attrs_map[k]["options"].append(
                 {"value": r["attr_value"], "count": int(r["quote_count"])}
@@ -317,6 +329,7 @@ def get_facets(request: Request, family_code: str = "", _: dict = Depends(requir
 # GET /products/search
 # Params:
 #   family_code  — required
+#   q            — keyword search on description
 #   attrs        — JSON {"attr_key": ["val1","val2"]}  OR within key, AND across
 #   brand_ids    — comma-separated UUIDs
 #   vendor_ids   — comma-separated UUIDs
@@ -328,6 +341,7 @@ def get_facets(request: Request, family_code: str = "", _: dict = Depends(requir
 def search_products(request: Request, _: dict = Depends(require_estimator)):
     params      = request.query_params
     family_code = params.get("family_code", "")
+    q           = params.get("q", "")
     attrs_raw   = params.get("attrs", "")
     brand_ids   = [x for x in params.get("brand_ids",  "").split(",") if x]
     vendor_ids  = [x for x in params.get("vendor_ids", "").split(",") if x]
@@ -353,7 +367,7 @@ def search_products(request: Request, _: dict = Depends(require_estimator)):
     try:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
-        # Whitelist attr_keys to prevent SQL injection
+        # Whitelist attr_keys against attribute_definitions to prevent injection
         cur.execute(
             """
             SELECT ad.attr_key
@@ -367,6 +381,12 @@ def search_products(request: Request, _: dict = Depends(require_estimator)):
 
         conditions  = ["pf.family_code = %s"]
         sql_params: list = [family_code]
+
+        if q:
+            conditions.append(
+                "(pr.description ILIKE %s OR to_tsvector('simple', pr.description) @@ plainto_tsquery('simple', %s))"
+            )
+            sql_params.extend([f"%{q}%", q])
 
         if brand_ids:
             conditions.append("pr.brand_id = ANY(%s::uuid[])")
@@ -392,7 +412,8 @@ def search_products(request: Request, _: dict = Depends(require_estimator)):
             conditions.append("ps.latest_quote_date <= %s")
             sql_params.append(date_to)
 
-        # Attribute filters: OR within key, AND across keys
+        # JSONB attribute filters: OR within key (ANY), AND across keys
+        # Uses pr.attributes->>'key' = ANY(values) — no product_attributes table
         for key, values in attrs.items():
             if key not in valid_attr_keys:
                 continue
@@ -401,16 +422,7 @@ def search_products(request: Request, _: dict = Depends(require_estimator)):
             values = [v for v in values if v]
             if not values:
                 continue
-            conditions.append(
-                """
-                EXISTS (
-                    SELECT 1 FROM proc.product_attributes pa2
-                    WHERE pa2.product_id = pr.product_id
-                      AND pa2.attr_key   = %s
-                      AND pa2.attr_value = ANY(%s)
-                )
-                """
-            )
+            conditions.append("pr.attributes ->> %s = ANY(%s)")
             sql_params.extend([key, values])
 
         where_clause = " AND ".join(conditions)
@@ -438,7 +450,7 @@ def search_products(request: Request, _: dict = Depends(require_estimator)):
         )
         total = int(cur.fetchone()["total"])
 
-        # Paginated data
+        # Paginated data — attributes read directly from pr.attributes JSONB column
         cur.execute(
             f"""
             SELECT
@@ -478,12 +490,7 @@ def search_products(request: Request, _: dict = Depends(require_estimator)):
                     ),
                     '[]'::jsonb
                 ) AS vendors,
-                COALESCE(
-                    (SELECT jsonb_object_agg(pa.attr_key, pa.attr_value)
-                     FROM proc.product_attributes pa
-                     WHERE pa.product_id = pr.product_id),
-                    '{{}}'::jsonb
-                ) AS attributes
+                pr.attributes
             FROM proc.products pr
             JOIN proc.product_families pf ON pf.family_id = pr.family_id
             LEFT JOIN proc.brands b  ON b.brand_id  = pr.brand_id
@@ -581,6 +588,98 @@ def get_unmatched(request: Request, _: dict = Depends(require_estimator)):
         rows = cur.fetchall()
         cur.close()
         return {"data": [dict(r) for r in rows], "meta": {"count": len(rows)}}
+    finally:
+        pool.putconn(conn)
+
+
+# ---------------------------------------------------------------------------
+# POST /products — create a new product (admin only)
+# product_code auto-assigned: {DISC[0]}-{FAMILY_CODE}-{SEQ:04d}
+# ---------------------------------------------------------------------------
+class CreateProductBody(BaseModel):
+    family_code: str
+    description: str
+    brand_id: str | None = None
+    attributes: dict = {}
+
+
+@router.post("")
+def create_product(body: CreateProductBody, request: Request, _: dict = Depends(require_admin)):
+    pool = request.app.state.pool
+    conn = pool.getconn()
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # Validate family_code and get family_id + discipline
+        cur.execute(
+            """
+            SELECT pf.family_id, pf.family_code, pf.discipline
+            FROM proc.product_families pf
+            WHERE pf.family_code = %s
+            """,
+            (body.family_code,),
+        )
+        fam = cur.fetchone()
+        if not fam:
+            raise HTTPException(status_code=404, detail=f"family_code {body.family_code!r} not found")
+
+        # Validate brand_id if provided
+        if body.brand_id:
+            cur.execute("SELECT brand_id FROM proc.brands WHERE brand_id = %s", (body.brand_id,))
+            if not cur.fetchone():
+                raise HTTPException(status_code=404, detail=f"brand_id {body.brand_id!r} not found")
+
+        # Generate product_code: {D}-{FAMILY_CODE}-{SEQ:04d}
+        disc_prefix = fam["discipline"][0]
+        cur.execute(
+            """
+            SELECT COUNT(*) AS cnt
+            FROM proc.products pr
+            WHERE pr.family_id = %s
+            """,
+            (fam["family_id"],),
+        )
+        seq = int(cur.fetchone()["cnt"]) + 1
+        product_code = f"{disc_prefix}-{body.family_code}-{seq:04d}"
+
+        # Ensure uniqueness (increment if collision)
+        while True:
+            cur.execute(
+                "SELECT 1 FROM proc.products WHERE product_code = %s", (product_code,)
+            )
+            if not cur.fetchone():
+                break
+            seq += 1
+            product_code = f"{disc_prefix}-{body.family_code}-{seq:04d}"
+
+        cur.execute(
+            """
+            INSERT INTO proc.products (family_id, brand_id, product_code, description, attributes)
+            VALUES (%s, %s, %s, %s, %s)
+            RETURNING product_id, product_code, description, attributes, created_at
+            """,
+            (
+                fam["family_id"],
+                body.brand_id if body.brand_id else None,
+                product_code,
+                body.description,
+                _json.dumps(body.attributes),
+            ),
+        )
+        new_row = dict(cur.fetchone())
+        new_row["product_id"] = str(new_row["product_id"])
+        new_row["family_code"] = body.family_code
+
+        conn.commit()
+        cur.close()
+        return {"data": new_row, "meta": {}}
+
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         pool.putconn(conn)
 
