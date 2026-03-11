@@ -5,7 +5,20 @@
       "Bash(docker compose:*)",
       "Bash(docker restart:*)",
       "Bash(python:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(psql \"postgresql://mep_user:changeme@localhost:5432/mep_ops\" -c \"SELECT version\\(\\);\")",
+      "Bash(docker ps:*)",
+      "Bash(docker -H npipe:////./pipe/docker_engine ps --filter \"name=mep_postgres\" --format \"{{.Names}} {{.Status}}\")",
+      "Bash(cmd.exe /c \"docker ps 2>&1 | head -5\")",
+      "Bash(cmd.exe /c \"docker ps --format \"\"{{.Names}} {{.Status}}\"\"\")",
+      "Bash(cmd.exe /c \"docker ps\")",
+      "Bash(cmd.exe /c \"docker ps 2>&1\")",
+      "Bash(docker.exe ps:*)",
+      "Bash(pip show:*)",
+      "Read(//c/Users/cedric.liu/AppData/Local/Programs/**)",
+      "Bash(ls /c/Python*)",
+      "Bash(where python:*)",
+      "Bash(/c/Users/cedric.liu/AppData/Local/Python/bin/python.exe -m pip show psycopg2 psycopg2-binary python-dotenv)"
     ]
   }
 }

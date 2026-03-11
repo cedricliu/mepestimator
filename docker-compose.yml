@@ -46,5 +46,20 @@ services:
       - backend
     command: npm run dev -- --host
 
+  admin:
+    build: ./admin
+    container_name: mep_admin
+    restart: unless-stopped
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    ports:
+      - "5174:5174"
+    volumes:
+      - ./admin:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    command: npm run dev -- --host
+
 volumes:
   postgres_data:

@@ -206,12 +206,12 @@ except Exception as e:
     record(False, "mv_price_stats refresh", f"Refresh failed: {e}")
 
 # ---------------------------------------------------------------------------
-# Test 7: All 5 new product tables exist in proc schema
+# Test 7: Core product tables exist in proc schema
+# Note: proc.product_attributes (EAV) is intentionally absent after 07_jsonb_migration.sql
 # ---------------------------------------------------------------------------
 try:
-    NEW_TABLES = [
-        "brands", "product_families", "attribute_definitions",
-        "products", "product_attributes",
+    EXPECTED_TABLES = [
+        "brands", "product_families", "attribute_definitions", "products",
     ]
     cur.execute(
         """
@@ -220,16 +220,27 @@ try:
         WHERE table_schema = 'proc'
           AND table_name = ANY(%s)
         """,
-        (NEW_TABLES,),
+        (EXPECTED_TABLES,),
     )
     found = {r[0] for r in cur.fetchall()}
-    missing = [t for t in NEW_TABLES if t not in found]
-    if not missing:
+    missing = [t for t in EXPECTED_TABLES if t not in found]
+    # product_attributes must NOT exist (was dropped by 07_jsonb_migration.sql)
+    cur.execute(
+        """
+        SELECT COUNT(*) FROM information_schema.tables
+        WHERE table_schema = 'proc' AND table_name = 'product_attributes'
+        """
+    )
+    eav_exists = cur.fetchone()[0] > 0
+    if not missing and not eav_exists:
         record(True, "Product tables exist",
-               f"All 5 new proc tables present: {', '.join(NEW_TABLES)}")
-    else:
+               f"All 4 core product tables present; EAV table correctly absent")
+    elif missing:
         record(False, "Product tables exist",
                f"Missing tables: {', '.join(missing)}")
+    else:
+        record(False, "Product tables exist",
+               "proc.product_attributes (EAV) still exists — run db/07_jsonb_migration.sql")
 except Exception as e:
     record(False, "Product tables exist", f"ERROR: {e}")
     conn.rollback()
@@ -300,6 +311,63 @@ try:
 except Exception as e:
     conn.rollback()
     record(False, "mv_product_price_stats refresh", f"Refresh failed: {e}")
+
+# ---------------------------------------------------------------------------
+# Test 11: JSONB GIN index exists on proc.products.attributes  [PRD v1.2 Test 6]
+# ---------------------------------------------------------------------------
+try:
+    cur.execute(
+        """
+        SELECT indexname
+        FROM pg_indexes
+        WHERE schemaname = 'proc'
+          AND tablename  = 'products'
+          AND indexdef   ILIKE '%using gin%'
+          AND indexdef   ILIKE '%attributes%'
+        """
+    )
+    gin_index = cur.fetchone()
+    if gin_index:
+        record(True, "JSONB GIN index on proc.products.attributes",
+               f"GIN index found: {gin_index[0]}")
+    else:
+        record(False, "JSONB GIN index on proc.products.attributes",
+               "No GIN index on attributes column — run db/07_jsonb_migration.sql")
+except Exception as e:
+    record(False, "JSONB GIN index on proc.products.attributes", f"ERROR: {e}")
+    conn.rollback()
+
+# ---------------------------------------------------------------------------
+# Test 12: proc.users has exactly 1 row (seeded admin)  [PRD v1.2 Test 7]
+# ---------------------------------------------------------------------------
+try:
+    cur.execute(
+        """
+        SELECT COUNT(*) FROM information_schema.tables
+        WHERE table_schema = 'proc' AND table_name = 'users'
+        """
+    )
+    table_exists = cur.fetchone()[0] > 0
+    if not table_exists:
+        record(False, "proc.users seeded (1 admin row)",
+               "Table proc.users does not exist — run db/06_auth.sql")
+    else:
+        cur.execute("SELECT COUNT(*) FROM proc.users")
+        count = cur.fetchone()[0]
+        if count == 1:
+            cur.execute("SELECT email, role FROM proc.users LIMIT 1")
+            row = cur.fetchone()
+            record(True, "proc.users seeded (1 admin row)",
+                   f"Exactly 1 user: email={row[0]}, role={row[1]}")
+        elif count == 0:
+            record(False, "proc.users seeded (1 admin row)",
+                   "Table exists but has 0 rows — check ADMIN_EMAIL/ADMIN_PASSWORD_HASH in .env")
+        else:
+            record(False, "proc.users seeded (1 admin row)",
+                   f"Expected 1 row, found {count} — unexpected state")
+except Exception as e:
+    record(False, "proc.users seeded (1 admin row)", f"ERROR: {e}")
+    conn.rollback()
 
 # ---------------------------------------------------------------------------
 # Summary

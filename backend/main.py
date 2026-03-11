@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 
-from routers import health, ingest, products, quotes, vendors
+from routers import auth, health, ingest, products, quotes, vendors
 
 
 @asynccontextmanager
@@ -35,11 +35,13 @@ app = FastAPI(title="MEP Pricing API", version="1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=os.getenv("CORS_ORIGINS", "*").split(","),
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+app.include_router(auth.router,      prefix="/auth",      tags=["auth"])
 app.include_router(ingest.router,    prefix="/ingest",    tags=["ingest"])
 app.include_router(quotes.router,    prefix="/quotes",    tags=["quotes"])
 app.include_router(vendors.router,   prefix="/vendors",   tags=["vendors"])

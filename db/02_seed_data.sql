@@ -64,5 +64,20 @@ ON CONFLICT (discipline_code) DO UPDATE
         name_zh     = EXCLUDED.name_zh,
         typical_uom = EXCLUDED.typical_uom;
 
+-- =============================================================
+-- Product Families — 5 canonical families per PRD v1.2 Section 3
+-- ON CONFLICT DO NOTHING — safe to re-run; also seeded in 04_product_schema.sql
+-- Note: family_id is generated; attribute_definitions are seeded in 04_product_schema.sql
+-- =============================================================
+\echo '>>> Seeding proc.product_families (5 families per PRD Section 3)...'
+INSERT INTO proc.product_families (family_code, family_name_zh, discipline, description)
+VALUES
+    ('EMT_CONDUIT',     '電線管',     'ELEC',  'EMT 薄鋼電線管'),
+    ('WIRE_CABLE',      '電線電纜',   'ELEC',  '電線與電纜'),
+    ('CIRCUIT_BREAKER', '無熔絲開關', 'ELEC',  '電路斷路器'),
+    ('HVAC_DUCT',       '風管',       'HVAC',  '空調風管'),
+    ('GI_PIPE',         '白鐵管',     'PLUMB', '鍍鋅鋼管')
+ON CONFLICT (family_code) DO NOTHING;
+
 \echo '>>> Seed data complete.'
 -- END OF FILE
