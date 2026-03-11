@@ -27,7 +27,14 @@
       "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0YWFjZjhkNC0xNzk3LTQwNWUtYjYyZC0xNTNkODAwYzIzZjMiLCJlbWFpbCI6ImNlZHJpYy5saXVAdHlzaWMuY29tLnR3Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzczMjM0NzA5LCJpYXQiOjE3NzMyMDU5MDl9.cKW5fbChXad11hoUMQKrnQySNR7AGQZSPG5vxjh5WXA\")",
       "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0YWFjZjhkNC0xNzk3LTQwNWUtYjYyZC0xNTNkODAwYzIzZjMiLCJlbWFpbCI6ImNlZHJpYy5saXVAdHlzaWMuY29tLnR3Iiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzczMjM0NzA5LCJpYXQiOjE3NzMyMDU5MDl9.cKW5fbChXad11hoUMQKrnQySNR7AGQZSPG5vxjh5WXA\" curl -v -X POST http://localhost:8000/products -H \"Authorization: Bearer $TOKEN\" -H \"Content-Type: application/json\" -d '{\"\"\"\"family_code\"\"\"\":\"\"\"\"EMT_CONDUIT\"\"\"\",\"\"\"\"description\"\"\"\":\"\"\"\"EMT test product\"\"\"\",\"\"\"\"attributes\"\"\"\":{}}')",
       "Bash(docker images:*)",
-      "Bash(timeout 300 docker build -t mep_db-frontend ./frontend)"
+      "Bash(timeout 300 docker build -t mep_db-frontend ./frontend)",
+      "Bash(DB_HOST=localhost python c:/Users/cedric.liu/mep_db/tests/validate.py)",
+      "Bash(docker rm:*)",
+      "Bash(docker rmi:*)",
+      "Bash(docker run:*)",
+      "Bash(docker volume:*)",
+      "Bash(npm --version)",
+      "Bash(npm install:*)"
     ]
   }
 }

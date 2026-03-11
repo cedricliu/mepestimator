@@ -16,6 +16,10 @@ import { createApiClient } from './api/client'
 import Login    from './pages/Login'
 import Products from './pages/Products'
 import Families from './pages/Families'
+import Upload   from './pages/Upload'
+import Review   from './pages/Review'
+import Vendors  from './pages/Vendors'
+import Health   from './pages/Health'
 
 // -----------------------------------------------------------------------
 // Auth + API context — shared across all pages
@@ -42,7 +46,7 @@ function NavBar() {
   const navigate = useNavigate()
 
   const link = ({ isActive }) =>
-    `px-4 py-2 rounded font-medium transition-colors ${
+    `px-3 py-2 rounded font-medium text-sm transition-colors ${
       isActive ? 'bg-gray-900 text-white' : 'text-gray-200 hover:bg-gray-700'
     }`
 
@@ -52,12 +56,34 @@ function NavBar() {
   }
 
   return (
-    <nav className="bg-gray-800 text-white px-6 py-3 flex items-center gap-2 shadow-md">
-      <span className="text-xl font-bold tracking-tight mr-6">
+    <nav className="bg-gray-800 text-white px-6 py-3 flex items-center gap-1 shadow-md flex-wrap">
+      <span className="text-xl font-bold tracking-tight mr-5">
         MEP 管理後台
       </span>
+
+      {/* Data pages */}
       <NavLink to="/products" className={link}>品項目錄</NavLink>
       <NavLink to="/families" className={link}>品類管理</NavLink>
+
+      {/* Separator */}
+      <span className="mx-2 text-gray-600 select-none">|</span>
+
+      {/* Ingest pages */}
+      <NavLink to="/upload" className={link}>上傳標單</NavLink>
+      <NavLink to="/review" className={link}>待審查</NavLink>
+
+      {/* Separator */}
+      <span className="mx-2 text-gray-600 select-none">|</span>
+
+      {/* Registry pages */}
+      <NavLink to="/vendors" className={link}>廠商</NavLink>
+
+      {/* Separator */}
+      <span className="mx-2 text-gray-600 select-none">|</span>
+
+      {/* System page */}
+      <NavLink to="/health" className={link}>系統狀態</NavLink>
+
       <div className="ml-auto flex items-center gap-4">
         {user && (
           <span className="text-sm text-gray-300">
@@ -102,6 +128,22 @@ function InnerApp({ auth }) {
               <Route
                 path="/families"
                 element={<ProtectedRoute><Families /></ProtectedRoute>}
+              />
+              <Route
+                path="/upload"
+                element={<ProtectedRoute><Upload /></ProtectedRoute>}
+              />
+              <Route
+                path="/review"
+                element={<ProtectedRoute><Review /></ProtectedRoute>}
+              />
+              <Route
+                path="/vendors"
+                element={<ProtectedRoute><Vendors /></ProtectedRoute>}
+              />
+              <Route
+                path="/health"
+                element={<ProtectedRoute><Health /></ProtectedRoute>}
               />
               <Route path="/" element={<Navigate to="/products" replace />} />
               <Route path="*" element={<Navigate to="/products" replace />} />
