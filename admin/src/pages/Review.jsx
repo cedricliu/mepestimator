@@ -8,7 +8,7 @@
  * - On successful resolve: card is removed from list + success toast
  */
 
-import { useState, useEffect, useCallback, useContext } from 'react'
+import { useState, useEffect, useCallback, useRef, useContext } from 'react'
 import { ApiContext } from '../App'
 
 const PAGE_LIMIT = 20
@@ -62,6 +62,94 @@ function AttributeEditor({ attrs, onChange }) {
           />
         </div>
       ))}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// ProductSearchInput — debounced typeahead for product search
+// ---------------------------------------------------------------------------
+function ProductSearchInput({ api, value, onChange }) {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState([])
+  const [open, setOpen] = useState(false)
+  const [searching, setSearching] = useState(false)
+  const debounceRef = useRef(null)
+  const containerRef = useRef(null)
+
+  useEffect(() => {
+    function handleClick(e) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  function handleQueryChange(e) {
+    const q = e.target.value
+    setQuery(q)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (!q.trim()) {
+      setResults([])
+      setOpen(false)
+      return
+    }
+    debounceRef.current = setTimeout(async () => {
+      setSearching(true)
+      try {
+        const { data } = await api.get(`/products/quick-search?q=${encodeURIComponent(q)}&limit=5`)
+        setResults(data.data || [])
+        setOpen(true)
+      } catch {
+        setResults([])
+      } finally {
+        setSearching(false)
+      }
+    }, 300)
+  }
+
+  function handleSelect(product) {
+    onChange(product.product_id)
+    setQuery(`${product.product_code} — ${product.description}`)
+    setOpen(false)
+    setResults([])
+  }
+
+  return (
+    <div ref={containerRef} className="relative">
+      <input
+        type="text"
+        value={query}
+        onChange={handleQueryChange}
+        placeholder="輸入品項名稱或代碼搜尋…"
+        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+      />
+      {searching && (
+        <span className="absolute right-3 top-2.5 text-xs text-gray-400">搜尋中…</span>
+      )}
+      {open && results.length > 0 && (
+        <ul className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+          {results.map(p => (
+            <li key={p.product_id}>
+              <button
+                type="button"
+                onMouseDown={() => handleSelect(p)}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors"
+              >
+                <span className="font-mono text-xs text-blue-700 mr-2">{p.product_code}</span>
+                <span className="text-gray-800">{p.description}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {value && (
+        <p className="mt-1 text-xs text-green-700 font-mono truncate">
+          ✓ {value}
+        </p>
+      )}
     </div>
   )
 }
@@ -162,18 +250,12 @@ function ReviewCard({ row, api, onResolved }) {
             <AttributeEditor attrs={attrs} onChange={setAttrs} />
           </div>
 
-          {/* Product ID input */}
+          {/* Product ID — search typeahead */}
           <div>
             <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
-              對應 Product ID <span className="text-red-500">*</span>
+              對應品項 <span className="text-red-500">*</span>
             </label>
-            <input
-              type="text"
-              value={productId}
-              onChange={e => setProductId(e.target.value)}
-              placeholder="貼上 product_id UUID（可從品項目錄取得）"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-300"
-            />
+            <ProductSearchInput api={api} value={productId} onChange={setProductId} />
           </div>
 
           {error && (

@@ -19,6 +19,16 @@ def health_check(request: Request, _: dict = Depends(require_estimator)):
         quote_count = cur.fetchone()[0]
         cur.execute("SELECT COUNT(*) FROM proc.vendors")
         vendor_count = cur.fetchone()[0]
+        cur.execute(
+            "SELECT parse_status, COUNT(*) FROM stg.raw_quote_lines GROUP BY parse_status ORDER BY parse_status"
+        )
+        parse_status_rows = cur.fetchall()
+        parse_status_breakdown = {r[0]: r[1] for r in parse_status_rows}
+        cur.execute("SELECT COUNT(*) FROM proc.users")
+        users_count = cur.fetchone()[0]
+        cur.execute("SELECT email FROM proc.users WHERE role = 'admin' LIMIT 1")
+        admin_row = cur.fetchone()
+        admin_email = admin_row[0] if admin_row else None
         cur.close()
         return {
             "data": {
@@ -26,6 +36,9 @@ def health_check(request: Request, _: dict = Depends(require_estimator)):
                 "db": "connected",
                 "quote_lines": quote_count,
                 "vendors": vendor_count,
+                "parse_status_breakdown": parse_status_breakdown,
+                "users_count": users_count,
+                "admin_email": admin_email,
             },
             "meta": {"count": 1},
         }

@@ -280,16 +280,196 @@ function VendorsTab({ api }) {
 }
 
 // ---------------------------------------------------------------------------
-// BrandsTab — placeholder (no backend endpoint yet)
+// NewBrandForm — inline create form
 // ---------------------------------------------------------------------------
-function BrandsTab() {
+function NewBrandForm({ api, onCreated, onCancel }) {
+  const [form, setForm] = useState({
+    brand_code: '',
+    brand_name: '',
+    brand_name_en: '',
+    country_of_origin: '',
+  })
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState(null)
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (!form.brand_code.trim() || !form.brand_name.trim()) {
+      setError('品牌代碼與品牌名稱為必填')
+      return
+    }
+    setSubmitting(true)
+    setError(null)
+    try {
+      const { data } = await api.post('/brands', form)
+      onCreated(data.data)
+    } catch (err) {
+      setError(err.response?.data?.detail || '建立失敗，請再試一次')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
-    <div className="mt-6 text-center py-16 border-2 border-dashed border-gray-200 rounded-xl">
-      <div className="text-4xl mb-3 opacity-40">🏷</div>
-      <p className="font-medium text-gray-500">品牌管理 — 待實作</p>
-      <p className="text-sm text-gray-400 mt-1">
-        TODO: GET /brands 端點尚未實作，將在 Sprint 7 完成
-      </p>
+    <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 mb-5">
+      <h3 className="font-semibold text-blue-900 mb-4">新增品牌</h3>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              品牌代碼 <span className="text-red-500">*</span>
+            </label>
+            <input
+              required
+              value={form.brand_code}
+              onChange={e => setForm(f => ({ ...f, brand_code: e.target.value.toUpperCase() }))}
+              placeholder="TECO"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-300"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              品牌名稱（中文）<span className="text-red-500">*</span>
+            </label>
+            <input
+              required
+              value={form.brand_name}
+              onChange={e => setForm(f => ({ ...f, brand_name: e.target.value }))}
+              placeholder="東元電機"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+            />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">品牌名稱（英文）</label>
+            <input
+              value={form.brand_name_en}
+              onChange={e => setForm(f => ({ ...f, brand_name_en: e.target.value }))}
+              placeholder="TECO Electric"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">原產地</label>
+            <input
+              value={form.country_of_origin}
+              onChange={e => setForm(f => ({ ...f, country_of_origin: e.target.value }))}
+              placeholder="台灣"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+            />
+          </div>
+        </div>
+
+        {error && (
+          <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
+            {error}
+          </p>
+        )}
+
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            disabled={submitting}
+            className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50"
+          >
+            {submitting ? '建立中…' : '建立品牌'}
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
+          >
+            取消
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// BrandsTab — GET /brands table + inline create form
+// ---------------------------------------------------------------------------
+function BrandsTab({ api }) {
+  const [brands, setBrands] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    api.get('/brands')
+      .then(({ data }) => setBrands(data.data))
+      .catch(err => setError(err.response?.data?.detail || '載入品牌失敗'))
+      .finally(() => setLoading(false))
+  }, [api])
+
+  function handleCreated(brand) {
+    setBrands(prev => [...prev, brand])
+    setShowForm(false)
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-2 mt-4">
+        {[1, 2, 3].map(i => <div key={i} className="h-12 bg-gray-200 rounded-lg animate-pulse" />)}
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-4">
+      <div className="flex items-center justify-between mb-4">
+        <span className="text-sm text-gray-500">{brands.length} 個品牌</span>
+        <button
+          onClick={() => setShowForm(s => !s)}
+          className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+        >
+          {showForm ? '取消' : '新增品牌'}
+        </button>
+      </div>
+
+      {showForm && (
+        <NewBrandForm api={api} onCreated={handleCreated} onCancel={() => setShowForm(false)} />
+      )}
+
+      {error && (
+        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+          {error}
+        </div>
+      )}
+
+      {brands.length === 0 ? (
+        <div className="text-center py-16 text-gray-400">
+          <p className="text-lg">尚無品牌資料</p>
+          <p className="text-sm mt-1">請新增品牌</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-gray-200">
+          <table className="min-w-full text-sm">
+            <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+              <tr>
+                <th className="px-4 py-3 text-left font-medium">品牌代碼</th>
+                <th className="px-4 py-3 text-left font-medium">品牌名稱</th>
+                <th className="px-4 py-3 text-left font-medium">英文名稱</th>
+                <th className="px-4 py-3 text-left font-medium">原產地</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {brands.map((b, i) => (
+                <tr key={b.brand_id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                  <td className="px-4 py-3 font-mono text-xs text-blue-700 font-medium">
+                    {b.brand_code}
+                  </td>
+                  <td className="px-4 py-3 font-medium text-gray-800">{b.brand_name}</td>
+                  <td className="px-4 py-3 text-gray-600">{b.brand_name_en || '—'}</td>
+                  <td className="px-4 py-3 text-gray-600">{b.country_of_origin || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }
@@ -333,7 +513,7 @@ export default function Vendors() {
       </div>
 
       {activeTab === 'vendors' && <VendorsTab api={api} />}
-      {activeTab === 'brands'  && <BrandsTab />}
+      {activeTab === 'brands'  && <BrandsTab api={api} />}
     </div>
   )
 }

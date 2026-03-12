@@ -7,6 +7,7 @@ GET  /products/families
 GET  /products/attributes?family_code=
 GET  /products/facets?family_code=
 GET  /products/search
+GET  /products/quick-search   ← cross-family keyword search (typeahead)
 GET  /products/all
 GET  /products/brands?family_code=
 GET  /products/unmatched
@@ -737,5 +738,55 @@ def match_legacy(body: MatchLegacyBody, request: Request, _: dict = Depends(requ
         product_id, confidence = _match_product(cur, body.description, body.family_code)
         cur.close()
         return {"data": {"product_id": product_id, "confidence": confidence}, "meta": {}}
+    finally:
+        pool.putconn(conn)
+
+
+# ---------------------------------------------------------------------------
+# GET /products/quick-search
+# Cross-family keyword search for typeahead use (e.g. Review page product picker).
+# Params:
+#   q     — search term (ILIKE match on product_code + description)
+#   limit — max results (default 5, capped at 20)
+# ---------------------------------------------------------------------------
+@router.get("/quick-search")
+def quick_search_products(request: Request, _: dict = Depends(require_estimator)):
+    params = request.query_params
+    q = params.get("q", "").strip()
+    try:
+        limit = min(20, max(1, int(params.get("limit", "5"))))
+    except ValueError:
+        limit = 5
+
+    if not q:
+        return {"data": [], "meta": {"count": 0}}
+
+    pool = request.app.state.pool
+    conn = pool.getconn()
+    try:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            """
+            SELECT pr.product_id, pr.product_code, pr.description,
+                   pf.family_code, pf.family_name_zh
+            FROM proc.products pr
+            JOIN proc.product_families pf ON pf.family_id = pr.family_id
+            WHERE pr.description ILIKE %s
+               OR pr.product_code ILIKE %s
+            ORDER BY pr.description
+            LIMIT %s
+            """,
+            (f"%{q}%", f"%{q}%", limit),
+        )
+        rows = cur.fetchall()
+        data = []
+        for r in rows:
+            row = dict(r)
+            row["product_id"] = str(row["product_id"])
+            data.append(row)
+        cur.close()
+        return {"data": data, "meta": {"count": len(data)}}
+    except Exception as e:
+        return {"data": [], "meta": {"count": 0, "errors": [str(e)]}}
     finally:
         pool.putconn(conn)

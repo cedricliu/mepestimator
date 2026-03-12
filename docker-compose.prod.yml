@@ -1,0 +1,37 @@
+# MEP Pricing Intelligence — Production Compose Override
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Changes vs base:
+#   - backend: removes --reload, no direct port exposure
+#   - frontend/admin: NODE_ENV=production
+#   - nginx: new service, public-facing on :80 and :443
+
+services:
+  backend:
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+    ports: []   # nginx is the only public-facing entry point
+
+  frontend:
+    environment:
+      - NODE_ENV=production
+      - VITE_API_URL=/api
+
+  admin:
+    environment:
+      - NODE_ENV=production
+      - VITE_API_URL=/api
+
+  nginx:
+    image: nginx:alpine
+    container_name: mep_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - backend
+      - frontend
+      - admin

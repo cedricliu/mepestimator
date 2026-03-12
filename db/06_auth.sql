@@ -47,11 +47,20 @@ CREATE INDEX IF NOT EXISTS idx_rt_revoked    ON proc.refresh_tokens (revoked);
 \getenv admin_email         ADMIN_EMAIL
 \getenv admin_password_hash ADMIN_PASSWORD_HASH
 
--- Only insert if both vars were found in the environment (non-empty)
 INSERT INTO proc.users (email, hashed_password, role, display_name, active)
 SELECT :'admin_email', :'admin_password_hash', 'admin', 'Admin', true
 WHERE  length(trim(:'admin_email'))         > 0
   AND  length(trim(:'admin_password_hash')) > 0
+ON CONFLICT (email) DO NOTHING;
+
+\echo '>>> Seeding estimator user from environment...'
+\getenv estimator_email         ESTIMATOR_EMAIL
+\getenv estimator_password_hash ESTIMATOR_PASSWORD_HASH
+
+INSERT INTO proc.users (email, hashed_password, role, display_name, active)
+SELECT :'estimator_email', :'estimator_password_hash', 'estimator', 'Estimator', true
+WHERE  length(trim(:'estimator_email'))         > 0
+  AND  length(trim(:'estimator_password_hash')) > 0
 ON CONFLICT (email) DO NOTHING;
 
 \echo '>>> Auth tables complete.'

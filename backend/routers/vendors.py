@@ -14,11 +14,18 @@ router = APIRouter()
 
 
 @router.get("")
-def list_vendors(request: Request, _: dict = Depends(require_estimator)):
+def list_vendors(
+    request: Request,
+    limit: int = 50,
+    offset: int = 0,
+    _: dict = Depends(require_estimator),
+):
     pool = request.app.state.pool
     conn = pool.getconn()
     try:
         cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM proc.vendors WHERE is_active = true")
+        total = cur.fetchone()[0]
         cur.execute(
             """
             SELECT vendor_id, vendor_code, vendor_name, discipline_codes,
@@ -26,7 +33,9 @@ def list_vendors(request: Request, _: dict = Depends(require_estimator)):
             FROM proc.vendors
             WHERE is_active = true
             ORDER BY vendor_name
-            """
+            LIMIT %s OFFSET %s
+            """,
+            (limit, offset),
         )
         rows = cur.fetchall()
         cols = [d[0] for d in cur.description]
@@ -36,7 +45,7 @@ def list_vendors(request: Request, _: dict = Depends(require_estimator)):
             row["vendor_id"] = str(row["vendor_id"])
             data.append(row)
         cur.close()
-        return {"data": data, "meta": {"count": len(data)}}
+        return {"data": data, "meta": {"count": len(data), "total": total, "limit": limit, "offset": offset}}
     except Exception as e:
         return {"data": [], "meta": {"count": 0, "errors": [str(e)]}}
     finally:

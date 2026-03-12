@@ -35,6 +35,7 @@ call :run_sql "db\04_product_schema.sql"
 call :run_sql "db\05_sample_data.sql"
 call :run_sql "db\06_auth.sql"
 call :run_sql "db\07_jsonb_migration.sql"
+call :run_sql "db\08_match_status.sql"
 
 echo.
 echo ======================================

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-MEP Pricing DB Validation — 6 acceptance tests
+MEP Pricing DB Validation — 14 acceptance tests
 Usage:  python tests/validate.py
 Exit:   0 if all pass, 1 if any fail (CI-compatible)
 """
@@ -9,6 +9,7 @@ import os
 import sys
 
 import psycopg2
+import requests
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -338,7 +339,7 @@ except Exception as e:
     conn.rollback()
 
 # ---------------------------------------------------------------------------
-# Test 12: proc.users has exactly 1 row (seeded admin)  [PRD v1.2 Test 7]
+# Test 12: proc.users has 1 admin + 1 estimator seeded  [PRD v1.2 Test 7]
 # ---------------------------------------------------------------------------
 try:
     cur.execute(
@@ -349,25 +350,80 @@ try:
     )
     table_exists = cur.fetchone()[0] > 0
     if not table_exists:
-        record(False, "proc.users seeded (1 admin row)",
+        record(False, "proc.users seeded (admin + estimator)",
                "Table proc.users does not exist — run db/06_auth.sql")
     else:
-        cur.execute("SELECT COUNT(*) FROM proc.users")
-        count = cur.fetchone()[0]
-        if count == 1:
-            cur.execute("SELECT email, role FROM proc.users LIMIT 1")
-            row = cur.fetchone()
-            record(True, "proc.users seeded (1 admin row)",
-                   f"Exactly 1 user: email={row[0]}, role={row[1]}")
-        elif count == 0:
-            record(False, "proc.users seeded (1 admin row)",
-                   "Table exists but has 0 rows — check ADMIN_EMAIL/ADMIN_PASSWORD_HASH in .env")
+        cur.execute(
+            "SELECT role, email FROM proc.users WHERE role IN ('admin','estimator') ORDER BY role"
+        )
+        rows = cur.fetchall()
+        roles_found = {r[0] for r in rows}
+        if 'admin' in roles_found and 'estimator' in roles_found:
+            summary = ", ".join(f"{r[0]}={r[1]}" for r in rows)
+            record(True, "proc.users seeded (admin + estimator)",
+                   f"Both roles present: {summary}")
+        elif not rows:
+            record(False, "proc.users seeded (admin + estimator)",
+                   "Table exists but has 0 rows — check ADMIN_EMAIL/ESTIMATOR_EMAIL in .env")
         else:
-            record(False, "proc.users seeded (1 admin row)",
-                   f"Expected 1 row, found {count} — unexpected state")
+            missing = {'admin', 'estimator'} - roles_found
+            record(False, "proc.users seeded (admin + estimator)",
+                   f"Missing role(s): {', '.join(missing)} — check .env and re-run setup.bat")
 except Exception as e:
-    record(False, "proc.users seeded (1 admin row)", f"ERROR: {e}")
+    record(False, "proc.users seeded (admin + estimator)", f"ERROR: {e}")
     conn.rollback()
+
+# ---------------------------------------------------------------------------
+# Test 13: POST /vendors without token returns 401
+# ---------------------------------------------------------------------------
+API_BASE = os.getenv("API_BASE", "http://localhost:8000")
+
+try:
+    resp = requests.post(
+        f"{API_BASE}/vendors",
+        json={"vendor_code": "TEST_AUTH", "vendor_name": "Auth Test Vendor"},
+        timeout=5,
+    )
+    if resp.status_code == 401:
+        record(True, "POST /vendors without token → 401",
+               f"Correctly rejected unauthenticated request (status={resp.status_code})")
+    else:
+        record(False, "POST /vendors without token → 401",
+               f"Expected 401, got {resp.status_code}: {resp.text[:120]}")
+except requests.exceptions.ConnectionError:
+    record(False, "POST /vendors without token → 401",
+           f"Could not connect to {API_BASE} — is the backend running?")
+except Exception as e:
+    record(False, "POST /vendors without token → 401", f"ERROR: {e}")
+
+# ---------------------------------------------------------------------------
+# Test 14: GET /ingest/review rejects a non-admin (invalid signature) token
+# Uses a forged token directly — no login required.
+# Any correctly wired auth middleware must return 401 for a bad signature.
+# ---------------------------------------------------------------------------
+try:
+    # JWT with estimator role claim but invalid signature — must be rejected
+    bad_token = (
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
+        ".eyJzdWIiOiJ0ZXN0QGV4YW1wbGUuY29tIiwicm9sZSI6ImVzdGltYXRvciIsImV4cCI6OTk5OTk5OTk5OX0"
+        ".invalidsignature"
+    )
+    review_resp = requests.get(
+        f"{API_BASE}/ingest/review",
+        headers={"Authorization": f"Bearer {bad_token}"},
+        timeout=5,
+    )
+    if review_resp.status_code in (401, 403):
+        record(True, "GET /ingest/review rejects invalid token → 401/403",
+               f"Invalid token correctly rejected (status={review_resp.status_code})")
+    else:
+        record(False, "GET /ingest/review rejects invalid token → 401/403",
+               f"Expected 401/403, got {review_resp.status_code}: {review_resp.text[:120]}")
+except requests.exceptions.ConnectionError:
+    record(False, "GET /ingest/review rejects invalid token → 401/403",
+           f"Could not connect to {API_BASE} — is the backend running?")
+except Exception as e:
+    record(False, "GET /ingest/review rejects invalid token → 401/403", f"ERROR: {e}")
 
 # ---------------------------------------------------------------------------
 # Summary
