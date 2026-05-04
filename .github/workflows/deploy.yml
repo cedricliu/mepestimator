@@ -20,7 +20,8 @@ jobs:
             cd /opt/mep_db
 
             echo ">>> Pulling latest code"
-            git pull origin main
+            git fetch origin main
+            git reset --hard origin/main
 
             echo ">>> Building containers"
             docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.caddy.yml build backend frontend admin
