@@ -1,0 +1,21 @@
+# Caddy override — use instead of docker-compose.prod.yml's nginx service
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.caddy.yml up -d
+#
+# Differences vs prod overlay:
+#   - backend keeps port 8000 exposed (Caddy proxies to it)
+#   - frontend keeps port 5173 exposed
+#   - admin keeps port 5174 exposed
+#   - nginx service is NOT included (Caddy handles routing + TLS)
+
+services:
+  backend:
+    ports:
+      - "8000:8000"
+
+  frontend:
+    ports:
+      - "5173:5173"
+
+  admin:
+    ports:
+      - "5174:5174"

@@ -161,7 +161,7 @@ function InnerApp({ auth }) {
 export default function App() {
   const auth = useAuth()
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/admin">
       <InnerApp auth={auth} />
     </BrowserRouter>
   )

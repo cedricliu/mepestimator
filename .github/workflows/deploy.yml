@@ -1,0 +1,47 @@
+name: Deploy to Hetzner
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            cd /opt/mep_db
+
+            echo ">>> Pulling latest code"
+            git pull origin main
+
+            echo ">>> Building containers"
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.caddy.yml build backend frontend admin
+
+            echo ">>> Restarting services"
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.caddy.yml up -d postgres backend frontend admin
+
+            echo ">>> Waiting for postgres"
+            timeout 30 bash -c 'until docker exec mep_postgres pg_isready -U $DB_USER -d $DB_NAME; do sleep 1; done'
+
+            echo ">>> Running migrations"
+            for f in /opt/mep_db/db/01_schemas.sql \
+                     /opt/mep_db/db/02_seed_data.sql \
+                     /opt/mep_db/db/03_views.sql \
+                     /opt/mep_db/db/04_product_schema.sql \
+                     /opt/mep_db/db/05_sample_data.sql \
+                     /opt/mep_db/db/06_auth.sql \
+                     /opt/mep_db/db/07_jsonb_migration.sql \
+                     /opt/mep_db/db/08_match_status.sql; do
+              echo "  applying $f"
+              docker exec -i mep_postgres psql -U $DB_USER -d $DB_NAME < $f
+            done
+
+            echo ">>> Done"
